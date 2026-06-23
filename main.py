@@ -33,6 +33,18 @@ def list_subjects() -> dict[str, list[str]]:
     return {"subjects": storage.list_subjects()}
 
 
+@app.get("/files/{subject}")
+def list_files(subject: str) -> dict[str, object]:
+    try:
+        files = storage.list_files(subject)
+    except SubjectNotFoundError:
+        raise HTTPException(status_code=404, detail="Предмет не найден")
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Недопустимый предмет")
+
+    return {"subject": subject, "files": files}
+
+
 @app.post("/upload/file")
 async def upload_file(
     subject: str = Form(...),

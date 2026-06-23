@@ -65,6 +65,35 @@ def test_list_subjects_returns_sorted_dirs(tmp_path):
     assert storage.list_subjects(root_dir=tmp_path) == ["Математика", "Статистика"]
 
 
+def test_list_files_returns_sorted_files(tmp_path):
+    """Только файлы, отсортированы; подкаталоги игнорируются."""
+    subject_dir = tmp_path / "Статистика"
+    subject_dir.mkdir()
+    (subject_dir / "b.docx").write_text("x", encoding="utf-8")
+    (subject_dir / "a.pdf").write_text("x", encoding="utf-8")
+    (subject_dir / "вложенная").mkdir()
+
+    assert storage.list_files("Статистика", root_dir=tmp_path) == ["a.pdf", "b.docx"]
+
+
+def test_list_files_empty_subject_dir(tmp_path):
+    """Папка предмета есть, но пустая -> пустой список."""
+    (tmp_path / "Статистика").mkdir()
+    assert storage.list_files("Статистика", root_dir=tmp_path) == []
+
+
+def test_list_files_subject_not_found(tmp_path):
+    """Папки предмета нет -> SubjectNotFoundError."""
+    with pytest.raises(SubjectNotFoundError):
+        storage.list_files("Статистика", root_dir=tmp_path)
+
+
+def test_list_files_invalid_subject(tmp_path):
+    """Subject-путь отклоняется так же, как в save_file."""
+    with pytest.raises(ValueError):
+        storage.list_files("../x", root_dir=tmp_path)
+
+
 def test_seed_subjects_creates_root_and_folders(tmp_path):
     """seed_subjects создаёт ROOT_DIR (если нет) и папки из списка."""
     root = tmp_path / "data"  # ещё не существует

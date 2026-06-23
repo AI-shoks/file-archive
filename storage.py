@@ -56,6 +56,22 @@ def list_subjects(root_dir: Path = ROOT_DIR) -> list[str]:
     return sorted(p.name for p in root_dir.iterdir() if p.is_dir())
 
 
+def list_files(subject: str, root_dir: Path = ROOT_DIR) -> list[str]:
+    """Возвращает отсортированные имена файлов в папке предмета.
+
+    Валидация subject — та же, что в save_file (одно имя папки, не путь).
+    Нет папки предмета -> SubjectNotFoundError. Подкаталоги игнорируются.
+    """
+    if not subject or subject != Path(subject).name:
+        raise ValueError(f"Недопустимый предмет: {subject}")
+
+    subject_dir = root_dir / subject
+    if not subject_dir.is_dir():
+        raise SubjectNotFoundError(subject)
+
+    return sorted(p.name for p in subject_dir.iterdir() if p.is_file())
+
+
 def seed_subjects(subjects: list[str], root_dir: Path = ROOT_DIR) -> list[Path]:
     """Создаёт ROOT_DIR и перечисленные папки-предметы при старте.
 

@@ -15,6 +15,7 @@ def isolate_storage(tmp_path, monkeypatch):
     чтобы main.py не трогал реальный ROOT_DIR."""
     monkeypatch.setattr(storage, "save_file", functools.partial(storage.save_file, root_dir=tmp_path))
     monkeypatch.setattr(storage, "list_subjects", functools.partial(storage.list_subjects, root_dir=tmp_path))
+    monkeypatch.setattr(storage, "list_files", functools.partial(storage.list_files, root_dir=tmp_path))
     return tmp_path
 
 
@@ -32,6 +33,23 @@ def test_list_subjects_endpoint(isolate_storage):
 
     assert response.status_code == 200
     assert response.json() == {"subjects": ["Математика", "Статистика"]}
+
+
+def test_list_files_endpoint(isolate_storage):
+    subject_dir = isolate_storage / "Статистика"
+    subject_dir.mkdir()
+    (subject_dir / "b.docx").write_text("x", encoding="utf-8")
+    (subject_dir / "a.pdf").write_text("x", encoding="utf-8")
+
+    response = client.get("/files/Статистика")
+
+    assert response.status_code == 200
+    assert response.json() == {"subject": "Статистика", "files": ["a.pdf", "b.docx"]}
+
+
+def test_list_files_endpoint_subject_not_found(isolate_storage):
+    response = client.get("/files/НетТакого")
+    assert response.status_code == 404
 
 
 def test_upload_file_success(isolate_storage):
