@@ -1,6 +1,9 @@
+import os
 from pathlib import Path
 
-ROOT_DIR = Path("C:/Users/artem/file-archive-data")
+# Путь к хранилищу берётся из env (на деплое его задаёт платформа),
+# с откатом на локальный путь для разработки.
+ROOT_DIR = Path(os.environ.get("FILE_ARCHIVE_ROOT", "C:/Users/artem/file-archive-data"))
 
 # Известное ограничение Слоя 1: проверка идёт по уже прочитанным в память
 # байтам (await file.read() в main.py), то есть от самого факта буферизации
@@ -40,3 +43,24 @@ def save_file(subject: str, filename: str, content: bytes, root_dir: Path = ROOT
     dest = subject_dir / safe_name
     dest.write_bytes(content)
     return dest
+
+
+def seed_subjects(subjects: list[str], root_dir: Path = ROOT_DIR) -> list[Path]:
+    """Создаёт ROOT_DIR и перечисленные папки-предметы при старте.
+
+    Нужно для эфемерного деплоя (Render): после редеплоя диск пуст,
+    а вручную папки создать негде. Это ОТДЕЛЬНАЯ boot-time операция —
+    save_file по-прежнему НЕ создаёт папки сам, скоуп не меняется.
+    Список предметов приходит снаружи (env SEED_SUBJECTS), не из кода.
+    """
+    root_dir.mkdir(parents=True, exist_ok=True)
+    created = []
+    for subject in subjects:
+        # та же проверка, что и в save_file: subject обязан быть одним
+        # именем папки, а не путём.
+        if not subject or subject != Path(subject).name:
+            raise ValueError(f"Недопустимый предмет в SEED_SUBJECTS: {subject}")
+        path = root_dir / subject
+        path.mkdir(exist_ok=True)
+        created.append(path)
+    return created

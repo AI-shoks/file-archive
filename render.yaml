@@ -1,0 +1,17 @@
+services:
+  - type: web
+    name: file-archive
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      # Путь к хранилищу. /tmp гарантированно доступен для записи.
+      # Диск эфемерный by design — см. README.
+      - key: FILE_ARCHIVE_ROOT
+        value: /tmp/file-archive-data
+      # Папки-предметы, создаваемые при старте (CSV). Источник правды —
+      # здесь, а не в коде. На эфемерном инстансе пересоздаются при каждом
+      # деплое.
+      - key: SEED_SUBJECTS
+        value: "Статистика,Математика,Программирование"

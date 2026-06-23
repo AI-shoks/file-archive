@@ -1,3 +1,5 @@
+import os
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
@@ -5,7 +7,20 @@ from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 import storage
 from storage import FileTooLargeError, SubjectNotFoundError
 
-app = FastAPI(title="File Archive")
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # На эфемерном деплое диск пуст после редеплоя — сидируем папки-предметы
+    # из env-списка (CSV). Локально SEED_SUBJECTS обычно не задан, и сидирование
+    # не выполняется.
+    seed = os.environ.get("SEED_SUBJECTS", "")
+    subjects = [s.strip() for s in seed.split(",") if s.strip()]
+    if subjects:
+        storage.seed_subjects(subjects)
+    yield
+
+
+app = FastAPI(title="File Archive", lifespan=lifespan)
 
 
 @app.get("/health")
