@@ -14,12 +14,15 @@ class SubjectNotFoundError(Exception):
     pass
 
 
-def save_file(subject: str, filename: str, content: bytes) -> Path:
-    subject_dir = ROOT_DIR / subject
-    resolved_root = ROOT_DIR.resolve()
-    resolved_subject_dir = subject_dir.resolve()
-    if not resolved_subject_dir.is_relative_to(resolved_root):
+class FileTooLargeError(Exception):
+    pass
+
+
+def save_file(subject: str, filename: str, content: bytes, root_dir: Path = ROOT_DIR) -> Path:
+    if not subject or subject != Path(subject).name:
         raise ValueError(f"Недопустимый предмет: {subject}")
+
+    subject_dir = root_dir / subject
 
     if not subject_dir.is_dir():
         raise SubjectNotFoundError(subject)
@@ -32,7 +35,7 @@ def save_file(subject: str, filename: str, content: bytes) -> Path:
         raise ValueError("Имя файла пустое")
 
     if len(content) > MAX_FILE_SIZE_BYTES:
-        raise ValueError(f"Файл слишком большой (максимум {MAX_FILE_SIZE_BYTES // 1024} КБ)")
+        raise FileTooLargeError(f"Файл слишком большой (максимум {MAX_FILE_SIZE_BYTES // 1024} КБ)")
 
     dest = subject_dir / safe_name
     dest.write_bytes(content)

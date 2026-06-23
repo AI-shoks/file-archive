@@ -3,7 +3,7 @@ from pathlib import Path
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 
 import storage
-from storage import SubjectNotFoundError
+from storage import FileTooLargeError, SubjectNotFoundError
 
 app = FastAPI(title="File Archive")
 
@@ -23,6 +23,8 @@ async def upload_file(
         saved_path = storage.save_file(subject, file.filename or "", content)
     except SubjectNotFoundError:
         raise HTTPException(status_code=404, detail="Предмет не найден")
+    except FileTooLargeError:
+        raise HTTPException(status_code=413, detail="Файл слишком большой")
     except ValueError:
         raise HTTPException(status_code=400, detail="Недопустимый предмет или имя файла")
 
