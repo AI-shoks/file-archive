@@ -45,6 +45,17 @@ def save_file(subject: str, filename: str, content: bytes, root_dir: Path = ROOT
     return dest
 
 
+def list_subjects(root_dir: Path = ROOT_DIR) -> list[str]:
+    """Возвращает отсортированные имена папок-предметов в root_dir.
+
+    Если каталога ещё нет — пустой список (на эфемерном деплое до старта
+    сидирования такое возможно).
+    """
+    if not root_dir.is_dir():
+        return []
+    return sorted(p.name for p in root_dir.iterdir() if p.is_dir())
+
+
 def seed_subjects(subjects: list[str], root_dir: Path = ROOT_DIR) -> list[Path]:
     """Создаёт ROOT_DIR и перечисленные папки-предметы при старте.
 

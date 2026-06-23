@@ -51,6 +51,20 @@ def test_save_file_too_large(tmp_path):
         storage.save_file("Статистика", "report.docx", content, root_dir=tmp_path)
 
 
+def test_list_subjects_empty_when_no_root(tmp_path):
+    """Каталога нет -> пустой список, без ошибки."""
+    assert storage.list_subjects(root_dir=tmp_path / "missing") == []
+
+
+def test_list_subjects_returns_sorted_dirs(tmp_path):
+    """Возвращаются только папки, отсортированные; файлы игнорируются."""
+    (tmp_path / "Математика").mkdir()
+    (tmp_path / "Статистика").mkdir()
+    (tmp_path / "не_папка.txt").write_text("x", encoding="utf-8")
+
+    assert storage.list_subjects(root_dir=tmp_path) == ["Математика", "Статистика"]
+
+
 def test_seed_subjects_creates_root_and_folders(tmp_path):
     """seed_subjects создаёт ROOT_DIR (если нет) и папки из списка."""
     root = tmp_path / "data"  # ещё не существует

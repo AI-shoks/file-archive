@@ -28,6 +28,11 @@ def health() -> dict[str, str]:
     return {"status": "ok"}
 
 
+@app.get("/subjects")
+def list_subjects() -> dict[str, list[str]]:
+    return {"subjects": storage.list_subjects()}
+
+
 @app.post("/upload/file")
 async def upload_file(
     subject: str = Form(...),

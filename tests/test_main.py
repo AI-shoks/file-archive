@@ -11,9 +11,10 @@ client = TestClient(app)
 
 @pytest.fixture(autouse=True)
 def isolate_storage(tmp_path, monkeypatch):
-    """Подменяет storage.save_file на версию с root_dir=tmp_path,
-    чтобы main.py не писал в реальный ROOT_DIR."""
+    """Подменяет storage-функции на версии с root_dir=tmp_path,
+    чтобы main.py не трогал реальный ROOT_DIR."""
     monkeypatch.setattr(storage, "save_file", functools.partial(storage.save_file, root_dir=tmp_path))
+    monkeypatch.setattr(storage, "list_subjects", functools.partial(storage.list_subjects, root_dir=tmp_path))
     return tmp_path
 
 
@@ -21,6 +22,16 @@ def test_health():
     response = client.get("/health")
     assert response.status_code == 200
     assert response.json() == {"status": "ok"}
+
+
+def test_list_subjects_endpoint(isolate_storage):
+    (isolate_storage / "Статистика").mkdir()
+    (isolate_storage / "Математика").mkdir()
+
+    response = client.get("/subjects")
+
+    assert response.status_code == 200
+    assert response.json() == {"subjects": ["Математика", "Статистика"]}
 
 
 def test_upload_file_success(isolate_storage):
