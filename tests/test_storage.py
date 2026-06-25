@@ -16,6 +16,68 @@ def test_save_file_success(tmp_path):
     assert dest.read_bytes() == content
 
 
+def test_save_file_at_size_limit_succeeds(tmp_path):
+    """Файл РОВНО на лимите (== MAX) сохраняется (ловит '>' vs '>=')."""
+    subject_dir = tmp_path / "Статистика"
+    subject_dir.mkdir()
+    content = b"x" * storage.MAX_FILE_SIZE_BYTES
+
+    dest = storage.save_file("Статистика", "report.docx", content, root_dir=tmp_path)
+
+    assert dest.exists()
+    assert dest.read_bytes() == content
+
+
+def test_save_file_duplicate_name_is_renamed(tmp_path):
+    """Вторая загрузка того же имени не затирает первую, а сохраняется
+    как report(1).docx; третья — report(2).docx."""
+    subject_dir = tmp_path / "Статистика"
+    subject_dir.mkdir()
+
+    first = storage.save_file("Статистика", "report.docx", b"v1", root_dir=tmp_path)
+    second = storage.save_file("Статистика", "report.docx", b"v2", root_dir=tmp_path)
+    third = storage.save_file("Статистика", "report.docx", b"v3", root_dir=tmp_path)
+
+    assert first.name == "report.docx"
+    assert second.name == "report(1).docx"
+    assert third.name == "report(2).docx"
+    # первый файл цел, данные не потеряны
+    assert first.read_bytes() == b"v1"
+    assert second.read_bytes() == b"v2"
+    assert third.read_bytes() == b"v3"
+
+
+def test_save_file_fills_base_name_when_free(tmp_path):
+    """Есть report(1).docx, но базового report.docx нет: загрузка report.docx
+    занимает свободное базовое имя, а не плодит report(2).docx."""
+    subject_dir = tmp_path / "Статистика"
+    subject_dir.mkdir()
+    (subject_dir / "report(1).docx").write_bytes(b"old")
+
+    dest = storage.save_file("Статистика", "report.docx", b"v1", root_dir=tmp_path)
+
+    assert dest.name == "report.docx"
+    assert dest.read_bytes() == b"v1"
+    assert (subject_dir / "report(1).docx").read_bytes() == b"old"
+
+
+def test_save_file_skips_occupied_index(tmp_path):
+    """Базовое имя занято, report(1).docx тоже занят: следующая загрузка
+    перепрыгивает на первый свободный индекс (report(2).docx)."""
+    subject_dir = tmp_path / "Статистика"
+    subject_dir.mkdir()
+    (subject_dir / "report.docx").write_bytes(b"a")
+    (subject_dir / "report(1).docx").write_bytes(b"b")
+
+    dest = storage.save_file("Статистика", "report.docx", b"c", root_dir=tmp_path)
+
+    assert dest.name == "report(2).docx"
+    assert dest.read_bytes() == b"c"
+    # ранее существующие файлы не тронуты
+    assert (subject_dir / "report.docx").read_bytes() == b"a"
+    assert (subject_dir / "report(1).docx").read_bytes() == b"b"
+
+
 def test_save_file_invalid_subject(tmp_path):
     """Subject-путь (../x) отклоняется на первой проверке. Папка не нужна."""
     with pytest.raises(ValueError):

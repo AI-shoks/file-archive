@@ -1,12 +1,30 @@
+import logging
 import os
 from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import FileResponse
+from pydantic import BaseModel
 
 import storage
 from storage import ArchiveFileNotFoundError, FileTooLargeError, SubjectNotFoundError
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)s %(name)s %(message)s",
+)
+logger = logging.getLogger("file_archive")
+
+
+def parse_subjects(seed: str) -> list[str]:
+    """Разбирает CSV-список предметов из env SEED_SUBJECTS.
+
+    Пустые элементы и пробелы по краям отбрасываются. Это та логика,
+    что чуть не сорвала деплой (см. ROADMAP), поэтому вынесена в чистую
+    функцию и покрыта тестами отдельно от lifespan."""
+    return [s.strip() for s in seed.split(",") if s.strip()]
 
 
 @asynccontextmanager
@@ -14,28 +32,58 @@ async def lifespan(app: FastAPI):
     # На эфемерном деплое диск пуст после редеплоя — сидируем папки-предметы
     # из env-списка (CSV). Локально SEED_SUBJECTS обычно не задан, и сидирование
     # не выполняется.
-    seed = os.environ.get("SEED_SUBJECTS", "")
-    subjects = [s.strip() for s in seed.split(",") if s.strip()]
+    subjects = parse_subjects(os.environ.get("SEED_SUBJECTS", ""))
     if subjects:
-        storage.seed_subjects(subjects)
+        created = storage.seed_subjects(subjects)
+        logger.info("seeded %d subjects", len(created))
+    else:
+        logger.info("no SEED_SUBJECTS provided, skipping seeding")
     yield
 
 
 app = FastAPI(title="File Archive", lifespan=lifespan)
 
 
+class HealthResp(BaseModel):
+    status: str
+
+
+class SubjectsResp(BaseModel):
+    subjects: list[str]
+
+
+class FilesResp(BaseModel):
+    subject: str
+    files: list[str]
+
+
+class SearchResult(BaseModel):
+    subject: str
+    filename: str
+
+
+class SearchResp(BaseModel):
+    query: str
+    results: list[SearchResult]
+
+
+class UploadResp(BaseModel):
+    subject: str
+    filename: str
+
+
 @app.get("/health")
-def health() -> dict[str, str]:
-    return {"status": "ok"}
+def health() -> HealthResp:
+    return HealthResp(status="ok")
 
 
 @app.get("/subjects")
-def list_subjects() -> dict[str, list[str]]:
-    return {"subjects": storage.list_subjects()}
+def list_subjects() -> SubjectsResp:
+    return SubjectsResp(subjects=storage.list_subjects())
 
 
 @app.get("/files/{subject}")
-def list_files(subject: str) -> dict[str, object]:
+def list_files(subject: str) -> FilesResp:
     try:
         files = storage.list_files(subject)
     except SubjectNotFoundError:
@@ -43,7 +91,7 @@ def list_files(subject: str) -> dict[str, object]:
     except ValueError:
         raise HTTPException(status_code=400, detail="Недопустимый предмет")
 
-    return {"subject": subject, "files": files}
+    return FilesResp(subject=subject, files=files)
 
 
 @app.get("/files/{subject}/{filename}")
@@ -63,23 +111,27 @@ def download_file(subject: str, filename: str) -> FileResponse:
 
 
 @app.get("/search")
-def search(q: str) -> dict[str, object]:
+def search(q: str) -> SearchResp:
     try:
         results = storage.search_files(q)
     except ValueError:
         raise HTTPException(status_code=400, detail="Пустой поисковый запрос")
 
-    return {"query": q, "results": results}
+    return SearchResp(query=q, results=[SearchResult(**r) for r in results])
 
 
 @app.post("/upload/file")
 async def upload_file(
     subject: str = Form(...),
     file: UploadFile = File(...),
-) -> dict[str, str]:
+) -> UploadResp:
     content = await file.read()
     try:
-        saved_path = storage.save_file(subject, file.filename or "", content)
+        # Запись на диск синхронна (storage.save_file -> write_bytes); чтобы
+        # не блокировать event loop большой записью, уводим её в пул потоков.
+        saved_path = await run_in_threadpool(
+            storage.save_file, subject, file.filename or "", content
+        )
     except SubjectNotFoundError:
         raise HTTPException(status_code=404, detail="Предмет не найден")
     except FileTooLargeError:
@@ -87,4 +139,6 @@ async def upload_file(
     except ValueError:
         raise HTTPException(status_code=400, detail="Недопустимый предмет или имя файла")
 
-    return {"subject": subject, "filename": Path(saved_path).name}
+    saved_name = Path(saved_path).name
+    logger.info("uploaded %r to subject %r", saved_name, subject)
+    return UploadResp(subject=subject, filename=saved_name)

@@ -4,9 +4,26 @@ import pytest
 from fastapi.testclient import TestClient
 
 import storage
-from main import app
+from main import app, parse_subjects
 
 client = TestClient(app)
+
+
+@pytest.mark.parametrize(
+    "seed, expected",
+    [
+        ("", []),
+        ("   ", []),
+        (",,", []),
+        ("Статистика", ["Статистика"]),
+        (" Статистика , Математика ", ["Статистика", "Математика"]),
+        ("Статистика,,Математика,", ["Статистика", "Математика"]),
+    ],
+)
+def test_parse_subjects(seed, expected):
+    """CSV-разбор SEED_SUBJECTS: пустые элементы и пробелы отбрасываются.
+    Именно этот код чуть не сорвал деплой, поэтому покрыт отдельно."""
+    assert parse_subjects(seed) == expected
 
 
 @pytest.fixture(autouse=True)
@@ -135,6 +152,64 @@ def test_upload_file_invalid_subject():
     )
 
     assert response.status_code == 400
+
+
+def test_upload_file_at_size_limit_succeeds(isolate_storage):
+    """Файл ровно на лимите проходит через эндпоинт (граница == MAX)."""
+    subject_dir = isolate_storage / "Статистика"
+    subject_dir.mkdir()
+    content = b"x" * storage.MAX_FILE_SIZE_BYTES
+
+    response = client.post(
+        "/upload/file",
+        data={"subject": "Статистика"},
+        files={"file": ("report.docx", content)},
+    )
+
+    assert response.status_code == 200
+    assert (subject_dir / "report.docx").read_bytes() == content
+
+
+def test_upload_file_duplicate_name_is_renamed(isolate_storage):
+    """Повторная загрузка того же имени возвращает report(1).docx,
+    оба файла лежат на диске (нет тихой перезаписи)."""
+    subject_dir = isolate_storage / "Статистика"
+    subject_dir.mkdir()
+
+    first = client.post(
+        "/upload/file",
+        data={"subject": "Статистика"},
+        files={"file": ("report.docx", b"v1")},
+    )
+    second = client.post(
+        "/upload/file",
+        data={"subject": "Статистика"},
+        files={"file": ("report.docx", b"v2")},
+    )
+
+    assert first.json()["filename"] == "report.docx"
+    assert second.json()["filename"] == "report(1).docx"
+    assert (subject_dir / "report.docx").read_bytes() == b"v1"
+    assert (subject_dir / "report(1).docx").read_bytes() == b"v2"
+
+
+def test_upload_file_empty_filename_is_rejected(isolate_storage):
+    """Пустое имя файла отвергается на уровне эндпоинта.
+
+    Замечание: multipart-часть с filename="" не доходит до save_file —
+    FastAPI/`File(...)` отбраковывает её раньше как невалидный ввод (422).
+    Ветка ValueError->400 для пустого имени в storage остаётся защитной.
+    Главное для QA: пустое имя НЕ приводит к записи файла и НЕ даёт 2xx."""
+    (isolate_storage / "Статистика").mkdir()
+
+    response = client.post(
+        "/upload/file",
+        data={"subject": "Статистика"},
+        files={"file": ("", b"data")},
+    )
+
+    assert response.status_code == 422
+    assert list((isolate_storage / "Статистика").iterdir()) == []
 
 
 def test_upload_file_too_large(isolate_storage):
