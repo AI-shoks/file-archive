@@ -42,9 +42,10 @@
 
 ### Исключения и HTTP-коды
 
-- `SubjectNotFoundError` → 404 (предмет/папка не существует)
-- `FileTooLargeError`   → 413 (файл превышает лимит)
-- `ValueError`          → 400 (невалидный запрос: subject, имя файла)
+- `SubjectNotFoundError`     → 404 (предмет/папка не существует)
+- `ArchiveFileNotFoundError` → 404 (файл в предмете не найден)
+- `FileTooLargeError`        → 413 (файл превышает лимит)
+- `ValueError`               → 400 (невалидный запрос: subject, имя файла)
 - Все кастомные исключения наследуются от `Exception`, НЕ от `ValueError`.
   Причина: будь они наследниками `ValueError`, ветка `except ValueError`
   перехватила бы их первой и 404/413 никогда не сработали бы.

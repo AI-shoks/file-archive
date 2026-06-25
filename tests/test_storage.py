@@ -1,7 +1,7 @@
 import pytest
 
 import storage
-from storage import SubjectNotFoundError, FileTooLargeError
+from storage import ArchiveFileNotFoundError, SubjectNotFoundError, FileTooLargeError
 
 
 def test_save_file_success(tmp_path):
@@ -92,6 +92,44 @@ def test_list_files_invalid_subject(tmp_path):
     """Subject-путь отклоняется так же, как в save_file."""
     with pytest.raises(ValueError):
         storage.list_files("../x", root_dir=tmp_path)
+
+
+def test_get_file_path_success(tmp_path):
+    """Существующий файл -> возвращается его путь."""
+    subject_dir = tmp_path / "Статистика"
+    subject_dir.mkdir()
+    (subject_dir / "report.docx").write_bytes(b"data")
+
+    path = storage.get_file_path("Статистика", "report.docx", root_dir=tmp_path)
+    assert path == subject_dir / "report.docx"
+    assert path.read_bytes() == b"data"
+
+
+def test_get_file_path_subject_not_found(tmp_path):
+    with pytest.raises(SubjectNotFoundError):
+        storage.get_file_path("Статистика", "report.docx", root_dir=tmp_path)
+
+
+def test_get_file_path_file_not_found(tmp_path):
+    (tmp_path / "Статистика").mkdir()
+    with pytest.raises(ArchiveFileNotFoundError):
+        storage.get_file_path("Статистика", "missing.docx", root_dir=tmp_path)
+
+
+def test_get_file_path_invalid_subject(tmp_path):
+    with pytest.raises(ValueError):
+        storage.get_file_path("../x", "report.docx", root_dir=tmp_path)
+
+
+def test_get_file_path_traversal_filename_is_neutralized(tmp_path):
+    """'../' в имени файла отрезается -> ищется внутри папки предмета
+    и не находится (а не читается чужой файл)."""
+    subject_dir = tmp_path / "Статистика"
+    subject_dir.mkdir()
+    (tmp_path / "secret.txt").write_bytes(b"secret")  # вне папки предмета
+
+    with pytest.raises(ArchiveFileNotFoundError):
+        storage.get_file_path("Статистика", "../secret.txt", root_dir=tmp_path)
 
 
 def test_seed_subjects_creates_root_and_folders(tmp_path):

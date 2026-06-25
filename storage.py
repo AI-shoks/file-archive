@@ -21,6 +21,10 @@ class FileTooLargeError(Exception):
     pass
 
 
+class ArchiveFileNotFoundError(Exception):
+    pass
+
+
 def save_file(subject: str, filename: str, content: bytes, root_dir: Path = ROOT_DIR) -> Path:
     if not subject or subject != Path(subject).name:
         raise ValueError(f"Недопустимый предмет: {subject}")
@@ -70,6 +74,32 @@ def list_files(subject: str, root_dir: Path = ROOT_DIR) -> list[str]:
         raise SubjectNotFoundError(subject)
 
     return sorted(p.name for p in subject_dir.iterdir() if p.is_file())
+
+
+def get_file_path(subject: str, filename: str, root_dir: Path = ROOT_DIR) -> Path:
+    """Возвращает путь к существующему файлу предмета для скачивания.
+
+    Проверки — те же, что при загрузке: валидный subject (одно имя папки),
+    существующая папка предмета, безопасное имя файла (Path(...).name
+    отрезает любой путь/../). Нет папки -> SubjectNotFoundError,
+    нет файла -> ArchiveFileNotFoundError.
+    """
+    if not subject or subject != Path(subject).name:
+        raise ValueError(f"Недопустимый предмет: {subject}")
+
+    subject_dir = root_dir / subject
+    if not subject_dir.is_dir():
+        raise SubjectNotFoundError(subject)
+
+    safe_name = Path(filename).name
+    if not safe_name:
+        raise ValueError("Имя файла пустое")
+
+    dest = subject_dir / safe_name
+    if not dest.is_file():
+        raise ArchiveFileNotFoundError(safe_name)
+
+    return dest
 
 
 def seed_subjects(subjects: list[str], root_dir: Path = ROOT_DIR) -> list[Path]:

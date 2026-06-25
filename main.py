@@ -3,9 +3,10 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+from fastapi.responses import FileResponse
 
 import storage
-from storage import FileTooLargeError, SubjectNotFoundError
+from storage import ArchiveFileNotFoundError, FileTooLargeError, SubjectNotFoundError
 
 
 @asynccontextmanager
@@ -43,6 +44,22 @@ def list_files(subject: str) -> dict[str, object]:
         raise HTTPException(status_code=400, detail="Недопустимый предмет")
 
     return {"subject": subject, "files": files}
+
+
+@app.get("/files/{subject}/{filename}")
+def download_file(subject: str, filename: str) -> FileResponse:
+    try:
+        path = storage.get_file_path(subject, filename)
+    except SubjectNotFoundError:
+        raise HTTPException(status_code=404, detail="Предмет не найден")
+    except ArchiveFileNotFoundError:
+        raise HTTPException(status_code=404, detail="Файл не найден")
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Недопустимый предмет или имя файла")
+
+    # filename=path.name — клиент получит исходное имя файла, абсолютный
+    # путь сервера в ответ не попадает.
+    return FileResponse(path, filename=path.name)
 
 
 @app.post("/upload/file")

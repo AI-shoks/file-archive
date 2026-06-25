@@ -16,6 +16,7 @@ def isolate_storage(tmp_path, monkeypatch):
     monkeypatch.setattr(storage, "save_file", functools.partial(storage.save_file, root_dir=tmp_path))
     monkeypatch.setattr(storage, "list_subjects", functools.partial(storage.list_subjects, root_dir=tmp_path))
     monkeypatch.setattr(storage, "list_files", functools.partial(storage.list_files, root_dir=tmp_path))
+    monkeypatch.setattr(storage, "get_file_path", functools.partial(storage.get_file_path, root_dir=tmp_path))
     return tmp_path
 
 
@@ -49,6 +50,29 @@ def test_list_files_endpoint(isolate_storage):
 
 def test_list_files_endpoint_subject_not_found(isolate_storage):
     response = client.get("/files/НетТакого")
+    assert response.status_code == 404
+
+
+def test_download_file_success(isolate_storage):
+    subject_dir = isolate_storage / "Статистика"
+    subject_dir.mkdir()
+    (subject_dir / "report.docx").write_bytes(b"file body")
+
+    response = client.get("/files/Статистика/report.docx")
+
+    assert response.status_code == 200
+    assert response.content == b"file body"
+    assert "report.docx" in response.headers.get("content-disposition", "")
+
+
+def test_download_file_subject_not_found(isolate_storage):
+    response = client.get("/files/НетТакого/report.docx")
+    assert response.status_code == 404
+
+
+def test_download_file_not_found(isolate_storage):
+    (isolate_storage / "Статистика").mkdir()
+    response = client.get("/files/Статистика/missing.docx")
     assert response.status_code == 404
 
 
