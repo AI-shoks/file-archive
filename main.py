@@ -62,6 +62,16 @@ def download_file(subject: str, filename: str) -> FileResponse:
     return FileResponse(path, filename=path.name)
 
 
+@app.get("/search")
+def search(q: str) -> dict[str, object]:
+    try:
+        results = storage.search_files(q)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Пустой поисковый запрос")
+
+    return {"query": q, "results": results}
+
+
 @app.post("/upload/file")
 async def upload_file(
     subject: str = Form(...),

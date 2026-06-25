@@ -102,6 +102,32 @@ def get_file_path(subject: str, filename: str, root_dir: Path = ROOT_DIR) -> Pat
     return dest
 
 
+def search_files(query: str, root_dir: Path = ROOT_DIR) -> list[dict[str, str]]:
+    """Ищет файлы по подстроке в имени по всем предметам.
+
+    Регистронезависимо. Возвращает список {"subject":..., "filename":...},
+    отсортированный по (предмет, файл). Пустой запрос -> ValueError.
+    Подкаталоги внутри предметов игнорируются.
+    """
+    needle = query.strip().lower()
+    if not needle:
+        raise ValueError("Пустой поисковый запрос")
+
+    if not root_dir.is_dir():
+        return []
+
+    results: list[dict[str, str]] = []
+    for subject_dir in root_dir.iterdir():
+        if not subject_dir.is_dir():
+            continue
+        for entry in subject_dir.iterdir():
+            if entry.is_file() and needle in entry.name.lower():
+                results.append({"subject": subject_dir.name, "filename": entry.name})
+
+    results.sort(key=lambda r: (r["subject"], r["filename"]))
+    return results
+
+
 def seed_subjects(subjects: list[str], root_dir: Path = ROOT_DIR) -> list[Path]:
     """Создаёт ROOT_DIR и перечисленные папки-предметы при старте.
 

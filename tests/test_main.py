@@ -17,6 +17,7 @@ def isolate_storage(tmp_path, monkeypatch):
     monkeypatch.setattr(storage, "list_subjects", functools.partial(storage.list_subjects, root_dir=tmp_path))
     monkeypatch.setattr(storage, "list_files", functools.partial(storage.list_files, root_dir=tmp_path))
     monkeypatch.setattr(storage, "get_file_path", functools.partial(storage.get_file_path, root_dir=tmp_path))
+    monkeypatch.setattr(storage, "search_files", functools.partial(storage.search_files, root_dir=tmp_path))
     return tmp_path
 
 
@@ -74,6 +75,31 @@ def test_download_file_not_found(isolate_storage):
     (isolate_storage / "Статистика").mkdir()
     response = client.get("/files/Статистика/missing.docx")
     assert response.status_code == 404
+
+
+def test_search_endpoint(isolate_storage):
+    subject_dir = isolate_storage / "Статистика"
+    subject_dir.mkdir()
+    (subject_dir / "Лекция1.pdf").write_text("x", encoding="utf-8")
+    (subject_dir / "report.docx").write_text("x", encoding="utf-8")
+
+    response = client.get("/search", params={"q": "лекция"})
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "query": "лекция",
+        "results": [{"subject": "Статистика", "filename": "Лекция1.pdf"}],
+    }
+
+
+def test_search_endpoint_empty_query(isolate_storage):
+    response = client.get("/search", params={"q": "  "})
+    assert response.status_code == 400
+
+
+def test_search_endpoint_missing_query_param(isolate_storage):
+    response = client.get("/search")
+    assert response.status_code == 422  # обязательный параметр q отсутствует
 
 
 def test_upload_file_success(isolate_storage):

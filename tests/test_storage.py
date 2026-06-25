@@ -132,6 +132,39 @@ def test_get_file_path_traversal_filename_is_neutralized(tmp_path):
         storage.get_file_path("Статистика", "../secret.txt", root_dir=tmp_path)
 
 
+def test_search_files_matches_across_subjects(tmp_path):
+    """Регистронезависимый поиск подстроки по всем предметам, отсортировано."""
+    stat = tmp_path / "Статистика"
+    stat.mkdir()
+    (stat / "Лекция1.pdf").write_text("x", encoding="utf-8")
+    (stat / "домашка.docx").write_text("x", encoding="utf-8")
+    math = tmp_path / "Математика"
+    math.mkdir()
+    (math / "лекция_вводная.pdf").write_text("x", encoding="utf-8")
+
+    results = storage.search_files("лекция", root_dir=tmp_path)
+
+    assert results == [
+        {"subject": "Математика", "filename": "лекция_вводная.pdf"},
+        {"subject": "Статистика", "filename": "Лекция1.pdf"},
+    ]
+
+
+def test_search_files_no_match(tmp_path):
+    (tmp_path / "Статистика").mkdir()
+    (tmp_path / "Статистика" / "report.pdf").write_text("x", encoding="utf-8")
+    assert storage.search_files("отсутствует", root_dir=tmp_path) == []
+
+
+def test_search_files_empty_query(tmp_path):
+    with pytest.raises(ValueError):
+        storage.search_files("   ", root_dir=tmp_path)
+
+
+def test_search_files_missing_root(tmp_path):
+    assert storage.search_files("x", root_dir=tmp_path / "missing") == []
+
+
 def test_seed_subjects_creates_root_and_folders(tmp_path):
     """seed_subjects создаёт ROOT_DIR (если нет) и папки из списка."""
     root = tmp_path / "data"  # ещё не существует
