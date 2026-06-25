@@ -11,6 +11,7 @@ const filesList = el("files-list");
 const filesTitle = el("files-title");
 const uploadForm = el("upload-form");
 const uploadFile = el("upload-file");
+const uploadKey = el("upload-key");
 const searchForm = el("search-form");
 const searchInput = el("search-input");
 const searchPanel = el("search-panel");
@@ -127,12 +128,18 @@ uploadForm.addEventListener("submit", async (event) => {
   form.append("subject", selectedSubject);
   form.append("file", file);
 
+  // Ключ хранится ТОЛЬКО введённым пользователем (и в localStorage его
+  // браузера), в коде страницы его нет. Шлём заголовком, если указан.
+  const key = uploadKey.value.trim();
+  const headers = key ? { "X-API-Key": key } : undefined;
+  localStorage.setItem("uploadKey", key);
+
   try {
-    const resp = await api("/upload/file", { method: "POST", body: form });
+    const resp = await api("/upload/file", { method: "POST", body: form, headers });
     const { filename } = await resp.json();
     // Сервер мог переименовать (report(1).docx) — показываем фактическое имя.
     showMessage(`Загружено: ${filename}`, false);
-    uploadForm.reset();
+    uploadFile.value = "";  // сбрасываем только файл, ключ оставляем
     await loadFiles(selectedSubject);
   } catch (e) {
     showMessage(`Загрузка не удалась: ${e.message}`);
@@ -169,5 +176,9 @@ searchForm.addEventListener("submit", async (event) => {
     showMessage(`Поиск не удался: ${e.message}`);
   }
 });
+
+// Подставляем ранее введённый ключ из localStorage (удобство, не секрет —
+// это браузер самого пользователя).
+uploadKey.value = localStorage.getItem("uploadKey") || "";
 
 loadSubjects();

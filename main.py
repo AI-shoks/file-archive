@@ -1,9 +1,13 @@
 import logging
 import os
+import secrets
+import threading
+import time
+from collections import defaultdict, deque
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, Request, UploadFile
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
@@ -13,6 +17,65 @@ import storage
 from storage import ArchiveFileNotFoundError, FileTooLargeError, SubjectNotFoundError
 
 logger = logging.getLogger("file_archive")
+
+# --- Защита записи (Слой 2) -------------------------------------------------
+# Ключ хранится ТОЛЬКО на сервере (env). Во фронтенд (публичный static/app.js)
+# его зашивать нельзя — он виден всем; поэтому UI спрашивает ключ у юзера и
+# шлёт заголовком X-API-Key. Здесь — серверная проверка + rate-limit.
+#
+# Режим fail-closed: если UPLOAD_API_KEY не задан, загрузка ВЫКЛЮЧЕНА (503),
+# а не открыта. Осознанный выбор «secure by default»: забытый на проде ключ
+# не должен молча оставлять запись публичной (см. CLAUDE.md).
+UPLOAD_API_KEY = os.environ.get("UPLOAD_API_KEY", "").strip()
+
+# Rate-limit: не больше N загрузок с одного IP за окно. In-memory, на один
+# процесс (Render free = 1 воркер); сбрасывается при рестарте — для демо ок.
+UPLOAD_RATE_LIMIT = int(os.environ.get("UPLOAD_RATE_LIMIT", "20"))
+UPLOAD_RATE_WINDOW_SECONDS = 60
+
+# IP -> времена недавних загрузок. Доступ из пула потоков (sync-зависимости
+# FastAPI исполняются в threadpool), поэтому под локом.
+_upload_hits: dict[str, deque[float]] = defaultdict(deque)
+_upload_hits_lock = threading.Lock()
+
+
+def _client_ip(request: Request) -> str:
+    """IP клиента с учётом прокси Render. За балансировщиком request.client
+    содержит адрес прокси, реальный клиент — первый в X-Forwarded-For.
+    Заголовок подделываем — поэтому это defense-in-depth, не аутентификация."""
+    forwarded = request.headers.get("x-forwarded-for")
+    if forwarded:
+        return forwarded.split(",")[0].strip()
+    return request.client.host if request.client else "unknown"
+
+
+def enforce_upload_rate_limit(request: Request) -> None:
+    """Зависимость: ограничивает частоту загрузок с одного IP. Считаются ВСЕ
+    попытки (в т.ч. с неверным ключом) — чтобы заодно тормозить перебор ключа.
+    Стоит ПЕРЕД проверкой ключа в списке dependencies эндпоинта."""
+    ip = _client_ip(request)
+    now = time.monotonic()
+    with _upload_hits_lock:
+        hits = _upload_hits[ip]
+        while hits and now - hits[0] > UPLOAD_RATE_WINDOW_SECONDS:
+            hits.popleft()
+        if len(hits) >= UPLOAD_RATE_LIMIT:
+            raise HTTPException(status_code=429, detail="Слишком много загрузок, попробуйте позже")
+        hits.append(now)
+
+
+def require_upload_key(x_api_key: str | None = Header(default=None)) -> None:
+    """Зависимость: проверяет X-API-Key для записи.
+
+    - Ключ не сконфигурирован (env пуст) -> 503: запись намеренно выключена
+      (fail-closed), это не вина клиента.
+    - Ключ задан, но в запросе неверный/отсутствует -> 401.
+    Сравнение через secrets.compare_digest — постоянное время, без утечки
+    длины/префикса по таймингу."""
+    if not UPLOAD_API_KEY:
+        raise HTTPException(status_code=503, detail="Загрузка не настроена (UPLOAD_API_KEY не задан)")
+    if x_api_key is None or not secrets.compare_digest(x_api_key, UPLOAD_API_KEY):
+        raise HTTPException(status_code=401, detail="Неверный или отсутствующий ключ загрузки")
 
 
 def _configure_logging() -> None:
@@ -58,6 +121,14 @@ async def lifespan(app: FastAPI):
         logger.info("seeded %d subjects", len(created))
     else:
         logger.info("no SEED_SUBJECTS provided, skipping seeding")
+
+    # Видимый сигнал режима записи при старте (важно для прода).
+    if UPLOAD_API_KEY:
+        logger.info("upload protected by API key (rate limit %d/%ds)",
+                    UPLOAD_RATE_LIMIT, UPLOAD_RATE_WINDOW_SECONDS)
+    else:
+        logger.warning("UPLOAD_API_KEY не задан — загрузка ЗАКРЫТА (fail-closed), "
+                       "POST /upload/file вернёт 503")
     yield
 
 
@@ -140,7 +211,12 @@ def search(q: str) -> SearchResp:
     return SearchResp(query=q, results=[SearchResult(**r) for r in results])
 
 
-@app.post("/upload/file")
+@app.post(
+    "/upload/file",
+    # Порядок важен: rate-limit ВЫШЕ проверки ключа, чтобы перебор ключа
+    # тоже упирался в лимит.
+    dependencies=[Depends(enforce_upload_rate_limit), Depends(require_upload_key)],
+)
 async def upload_file(
     subject: str = Form(...),
     file: UploadFile = File(...),

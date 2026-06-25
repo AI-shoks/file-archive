@@ -3,10 +3,13 @@ import functools
 import pytest
 from fastapi.testclient import TestClient
 
+import main
 import storage
 from main import app, parse_subjects
 
 client = TestClient(app)
+
+TEST_UPLOAD_KEY = "test-upload-key"
 
 
 @pytest.mark.parametrize(
@@ -36,6 +39,20 @@ def isolate_storage(tmp_path, monkeypatch):
     monkeypatch.setattr(storage, "get_file_path", functools.partial(storage.get_file_path, root_dir=tmp_path))
     monkeypatch.setattr(storage, "search_files", functools.partial(storage.search_files, root_dir=tmp_path))
     return tmp_path
+
+
+@pytest.fixture(autouse=True)
+def upload_auth(monkeypatch):
+    """По умолчанию для тестов запись СКОНФИГУРИРОВАНА (ключ задан) и клиент
+    шлёт верный X-API-Key — чтобы существующие upload-тесты проверяли свою
+    логику, а не упирались в 503/401. Также чистит rate-limit между тестами,
+    иначе счётчик по IP 'testclient' тёк бы из теста в тест."""
+    monkeypatch.setattr(main, "UPLOAD_API_KEY", TEST_UPLOAD_KEY)
+    main._upload_hits.clear()
+    client.headers["x-api-key"] = TEST_UPLOAD_KEY
+    yield
+    client.headers.pop("x-api-key", None)
+    main._upload_hits.clear()
 
 
 def test_health():
@@ -263,3 +280,84 @@ def test_upload_file_response_has_no_absolute_path(isolate_storage):
     )
 
     assert str(isolate_storage) not in response.text
+
+
+# --- Защита записи (Слой 2) -------------------------------------------------
+
+
+def test_upload_missing_key_is_unauthorized(isolate_storage):
+    """Ключ сконфигурирован, но клиент его не прислал -> 401, файл не записан."""
+    (isolate_storage / "Статистика").mkdir()
+    local = TestClient(app)  # без дефолтного X-API-Key
+
+    response = local.post(
+        "/upload/file",
+        data={"subject": "Статистика"},
+        files={"file": ("report.docx", b"data")},
+    )
+
+    assert response.status_code == 401
+    assert list((isolate_storage / "Статистика").iterdir()) == []
+
+
+def test_upload_wrong_key_is_unauthorized(isolate_storage):
+    """Неверный ключ -> 401."""
+    (isolate_storage / "Статистика").mkdir()
+
+    response = client.post(
+        "/upload/file",
+        data={"subject": "Статистика"},
+        files={"file": ("report.docx", b"data")},
+        headers={"x-api-key": "wrong-key"},
+    )
+
+    assert response.status_code == 401
+
+
+def test_upload_correct_key_succeeds(isolate_storage):
+    """Верный ключ -> 200, файл записан (явный позитивный кейс auth)."""
+    subject_dir = isolate_storage / "Статистика"
+    subject_dir.mkdir()
+
+    response = client.post(
+        "/upload/file",
+        data={"subject": "Статистика"},
+        files={"file": ("report.docx", b"data")},
+        headers={"x-api-key": TEST_UPLOAD_KEY},
+    )
+
+    assert response.status_code == 200
+    assert (subject_dir / "report.docx").read_bytes() == b"data"
+
+
+def test_upload_disabled_when_key_unconfigured(isolate_storage, monkeypatch):
+    """Fail-closed: ключ не задан в env -> запись выключена (503), не открыта."""
+    monkeypatch.setattr(main, "UPLOAD_API_KEY", "")
+    (isolate_storage / "Статистика").mkdir()
+
+    response = client.post(
+        "/upload/file",
+        data={"subject": "Статистика"},
+        files={"file": ("report.docx", b"data")},
+    )
+
+    assert response.status_code == 503
+    assert list((isolate_storage / "Статистика").iterdir()) == []
+
+
+def test_upload_rate_limited(isolate_storage, monkeypatch):
+    """Сверх лимита загрузок с одного IP -> 429 (rate-limit поверх auth)."""
+    monkeypatch.setattr(main, "UPLOAD_RATE_LIMIT", 2)
+    main._upload_hits.clear()
+    (isolate_storage / "Статистика").mkdir()
+
+    codes = []
+    for i in range(3):
+        r = client.post(
+            "/upload/file",
+            data={"subject": "Статистика"},
+            files={"file": (f"r{i}.docx", b"data")},
+        )
+        codes.append(r.status_code)
+
+    assert codes == [200, 200, 429]
