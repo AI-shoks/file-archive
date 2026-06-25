@@ -1,0 +1,133 @@
+:root {
+  --bg: #f6f7f9;
+  --panel: #ffffff;
+  --border: #e1e4e8;
+  --accent: #2563eb;
+  --text: #1f2328;
+  --muted: #6b7280;
+  --error: #b42318;
+  --ok: #1a7f37;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+}
+
+header {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+  padding: 1rem 1.5rem;
+  background: var(--panel);
+  border-bottom: 1px solid var(--border);
+}
+
+header h1 { margin: 0; font-size: 1.25rem; }
+
+.search { display: flex; gap: 0.5rem; margin-left: auto; }
+
+.search input {
+  padding: 0.45rem 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  min-width: 220px;
+}
+
+button {
+  cursor: pointer;
+  padding: 0.45rem 0.8rem;
+  border: 1px solid var(--accent);
+  background: var(--accent);
+  color: #fff;
+  border-radius: 6px;
+  font-size: 0.9rem;
+}
+
+button:hover { filter: brightness(1.05); }
+
+.message {
+  margin: 0.75rem 1.5rem 0;
+  padding: 0.6rem 0.8rem;
+  border-radius: 6px;
+  background: #e7f5ec;
+  color: var(--ok);
+  border: 1px solid #b7e0c4;
+}
+
+.message.error {
+  background: #fdeceb;
+  color: var(--error);
+  border-color: #f3c2bd;
+}
+
+main {
+  display: grid;
+  grid-template-columns: 240px 1fr;
+  gap: 1rem;
+  padding: 1.5rem;
+  align-items: start;
+}
+
+#search-panel { grid-column: 1 / -1; }
+
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 1rem;
+}
+
+.panel h2 { margin: 0 0 0.75rem; font-size: 1rem; }
+
+.list { list-style: none; margin: 0; padding: 0; }
+
+.list li {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.35rem 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.list li:last-child { border-bottom: none; }
+
+.list .muted { color: var(--muted); }
+
+.link {
+  background: none;
+  border: none;
+  color: var(--accent);
+  padding: 0;
+  font-size: 0.95rem;
+  text-align: left;
+}
+
+.list a { color: var(--accent); text-decoration: none; }
+.list a:hover { text-decoration: underline; }
+
+.tag {
+  font-size: 0.75rem;
+  color: var(--muted);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 0.05rem 0.4rem;
+}
+
+.upload {
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  align-items: flex-start;
+}
+
+.upload h3 { margin: 0; font-size: 0.9rem; }

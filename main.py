@@ -6,6 +6,7 @@ from pathlib import Path
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 import storage
@@ -161,3 +162,13 @@ async def upload_file(
     saved_name = Path(saved_path).name
     logger.info("uploaded %r to subject %r", saved_name, subject)
     return UploadResp(subject=subject, filename=saved_name)
+
+
+# Слой 2: статический фронтенд (vanilla, без сборки) отдаётся самим FastAPI.
+# Монтируется ПОСЛЕДНИМ: Starlette матчит роуты в порядке регистрации, и
+# конкретные API-роуты выше перехватывают /health, /subjects, /files/...,
+# /search, /upload/file раньше этого catch-all. html=True отдаёт index.html
+# на "/". Каталог создаём при импорте — на эфемерном диске его может не быть.
+_STATIC_DIR = Path(__file__).parent / "static"
+_STATIC_DIR.mkdir(exist_ok=True)
+app.mount("/", StaticFiles(directory=_STATIC_DIR, html=True), name="static")

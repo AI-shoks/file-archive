@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>file-archive</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <header>
+    <h1>file-archive</h1>
+    <form id="search-form" class="search">
+      <input id="search-input" type="search" placeholder="Поиск по имени файла…" autocomplete="off">
+      <button type="submit">Найти</button>
+    </form>
+  </header>
+
+  <p id="message" class="message" hidden></p>
+
+  <main>
+    <section class="panel" id="subjects-panel">
+      <h2>Предметы</h2>
+      <ul id="subjects-list" class="list"></ul>
+    </section>
+
+    <section class="panel" id="files-panel">
+      <h2 id="files-title">Файлы</h2>
+      <ul id="files-list" class="list"></ul>
+
+      <form id="upload-form" class="upload" hidden>
+        <h3>Загрузить файл</h3>
+        <input id="upload-file" type="file" required>
+        <button type="submit">Загрузить</button>
+      </form>
+    </section>
+
+    <section class="panel" id="search-panel" hidden>
+      <h2>Результаты поиска</h2>
+      <ul id="search-list" class="list"></ul>
+    </section>
+  </main>
+
+  <script src="/app.js"></script>
+</body>
+</html>

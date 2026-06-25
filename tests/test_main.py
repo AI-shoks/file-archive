@@ -44,6 +44,32 @@ def test_health():
     assert response.json() == {"status": "ok"}
 
 
+def test_index_html_is_served():
+    """Корень '/' отдаёт статический index.html фронтенда (Слой 2)."""
+    response = client.get("/")
+    assert response.status_code == 200
+    assert "text/html" in response.headers.get("content-type", "")
+    assert "file-archive" in response.text
+
+
+def test_static_asset_is_served():
+    """Статический ассет (app.js) доступен по своему пути.
+
+    MIME-тип .js зависит от реестра ОС (mimetypes), поэтому проверяем не
+    content-type, а что отдано именно тело нашего скрипта."""
+    response = client.get("/app.js")
+    assert response.status_code == 200
+    assert "loadSubjects" in response.text
+
+
+def test_api_routes_win_over_static_mount():
+    """API-роут не перехватывается catch-all монтированием static.
+    /health должен остаться JSON-эндпоинтом, а не отдачей файла."""
+    response = client.get("/health")
+    assert response.status_code == 200
+    assert response.json() == {"status": "ok"}
+
+
 def test_list_subjects_endpoint(isolate_storage):
     (isolate_storage / "Статистика").mkdir()
     (isolate_storage / "Математика").mkdir()
