@@ -11,11 +11,30 @@ from pydantic import BaseModel
 import storage
 from storage import ArchiveFileNotFoundError, FileTooLargeError, SubjectNotFoundError
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s %(levelname)s %(name)s %(message)s",
-)
 logger = logging.getLogger("file_archive")
+
+
+def _configure_logging() -> None:
+    """Настраивает логгер file_archive независимо от uvicorn.
+
+    `logging.basicConfig()` при импорте ненадёжен: под uvicorn корневой
+    логгер уже может быть с хендлерами (тогда basicConfig — no-op) либо,
+    наоборот, не сконфигурирован так, как мы ждём. Поэтому вешаем
+    собственный StreamHandler прямо на логгер file_archive и фиксируем
+    уровень — наблюдаемость не зависит от настроек сервера. propagate=False
+    исключает дубль строк, если root тоже с хендлерами. Идемпотентно:
+    повторный импорт не плодит хендлеры.
+    """
+    if logger.handlers:
+        return
+    handler = logging.StreamHandler()
+    handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(name)s %(message)s"))
+    logger.addHandler(handler)
+    logger.setLevel(logging.INFO)
+    logger.propagate = False
+
+
+_configure_logging()
 
 
 def parse_subjects(seed: str) -> list[str]:
