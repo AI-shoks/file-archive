@@ -25,7 +25,7 @@ logger = logging.getLogger("file_archive")
 #
 # Режим fail-closed: если UPLOAD_API_KEY не задан, загрузка ВЫКЛЮЧЕНА (503),
 # а не открыта. Осознанный выбор «secure by default»: забытый на проде ключ
-# не должен молча оставлять запись публичной (см. CLAUDE.md).
+# не должен молча оставлять запись публичной (см. DECISIONS.md).
 UPLOAD_API_KEY = os.environ.get("UPLOAD_API_KEY", "").strip()
 
 # Rate-limit: не больше N загрузок с одного IP за окно. In-memory, на один
@@ -105,7 +105,7 @@ def parse_subjects(seed: str) -> list[str]:
     """Разбирает CSV-список предметов из env SEED_SUBJECTS.
 
     Пустые элементы и пробелы по краям отбрасываются. Это та логика,
-    что чуть не сорвала деплой (см. ROADMAP), поэтому вынесена в чистую
+    что чуть не сорвала деплой, поэтому вынесена в чистую
     функцию и покрыта тестами отдельно от lifespan."""
     return [s.strip() for s in seed.split(",") if s.strip()]
 
