@@ -3,7 +3,7 @@ from pathlib import Path
 
 # Путь к хранилищу берётся из env (на деплое его задаёт платформа),
 # с откатом на локальный путь для разработки.
-ROOT_DIR = Path(os.environ.get("FILE_ARCHIVE_ROOT", "C:/Users/artem/file-archive-data"))
+ROOT_DIR = Path(os.environ.get("FILE_ARCHIVE_ROOT", "./file-archive-data"))
 
 # Известное ограничение Слоя 1: проверка идёт по уже прочитанным в память
 # байтам (await file.read() в main.py), то есть от самого факта буферизации
@@ -26,7 +26,7 @@ class ArchiveFileNotFoundError(Exception):
 
 
 def _validate_subject(subject: str, *, context: str = "Недопустимый предмет") -> None:
-    """Единственная форма проверки subject (см. CLAUDE.md): subject обязан
+    """Единственная форма проверки subject (см. DECISIONS.md): subject обязан
     быть ОДНИМ именем папки, а не путём. `subject != Path(subject).name`
     отсекает "../x", "a/b", абсолютные пути — после неё subject физически
     не может выйти за ROOT_DIR. context позволяет менять текст ошибки
